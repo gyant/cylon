@@ -1,0 +1,19 @@
+[package]
+name = "cylon"
+version = "0.1.0"
+edition = "2021"
+
+[features]
+default = []
+metal = ["candle-core/metal", "candle-nn/metal"]
+cuda = ["candle-core/cuda", "candle-nn/cuda"]
+cudnn = ["candle-core/cudnn", "candle-nn/cuda"]
+
+[dependencies]
+candle-core = "0.8.3"
+candle-transformers = "0.8.3"
+candle-nn = "0.8.3"
+tonic = "0.11"
+prost = "0.12"
+tokenizers = "0.15"
+
