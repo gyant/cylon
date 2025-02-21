@@ -69,7 +69,7 @@ struct Args {
     sample_len: usize,
 
     /// Disable the key-value cache.
-    #[arg(long, default_value_t = true)]
+    #[arg(long, default_value_t = false)]
     no_kv_cache: bool,
 
     /// The initial prompt.

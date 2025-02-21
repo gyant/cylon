@@ -6,13 +6,14 @@ edition = "2021"
 [features]
 default = []
 metal = ["candle-core/metal", "candle-nn/metal"]
-cuda = ["candle-core/cuda", "candle-nn/cuda"]
-cudnn = ["candle-core/cudnn", "candle-nn/cuda"]
+cuda = ["candle-core/cuda", "candle-nn/cuda", "candle-transformers/flash-attn"]
+cudnn = ["candle-core/cudnn", "candle-nn/cuda", "candle-transformers/flash-attn"]
 
 [dependencies]
 candle-core = "0.8.3"
 candle-transformers = "0.8.3"
 candle-nn = "0.8.3"
+candle-flash-attn = "0.8.3"
 tonic = "0.11"
 prost = "0.12"
 tokenizers = "0.15"
