@@ -17,8 +17,14 @@ build-docker-cudnn:
 	docker build --tag registry.gyant.internal/cylon:cudnn --build-arg candle_feature=cudnn . 
 
 run-docker-cuda:
-	docker run --rm --gpus all registry.gyant.internal/cylon:cuda
+	docker run --rm --gpus all registry.gyant.internal/cylon:cuda /bin/bash
 
 run-docker-cudnn:
-	docker run --rm --gpus all registry.gyant.internal/cylon:cudnn
+	docker run --rm --gpus all registry.gyant.internal/cylon:cudnn /bin/bash
+
+run-docker-metal:
+	docker run --rm --gpus all registry.gyant.internal/cylon:metal /bin/bash
+
+run-docker-cpu:
+	docker run --rm --gpus all registry.gyant.internal/cylon:cpu /bin/bash
 
