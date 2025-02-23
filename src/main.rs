@@ -163,7 +163,7 @@ fn main() -> Result<()> {
     let mut tokenizer = TokenOutputStream::new(tokenizer);
 
     println!("starting the inference loop");
-    print!("{prompt}");
+    println!("{prompt}");
 
     let mut logits_processor = {
         let temperature = args.temperature;

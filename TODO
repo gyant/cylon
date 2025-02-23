@@ -1,0 +1,6 @@
+# TODO
+
+1. Implement something akin to AutoTokenizer with tokenizer_config.json
+2. Create a dynamic model configurator.
+3. Wire up GRPC to inference pipeline.
+
