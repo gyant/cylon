@@ -1,18 +1,14 @@
 use crate::config::CylonConfig;
 use anyhow::{bail, Error as E, Result};
-use candle_nn::VarBuilder;
-use std::fs::File;
-use tokenizers::Tokenizer;
-
-use candle_transformers::models::llama;
-use llama::{LlamaConfig, LlamaEosToks};
-
 use candle_core::utils::{cuda_is_available, metal_is_available};
 use candle_core::{DType, Device, Tensor};
-
+use candle_nn::VarBuilder;
 use candle_transformers::generation::{LogitsProcessor, Sampling};
-
+use candle_transformers::models::llama;
+use llama::{LlamaConfig, LlamaEosToks};
+use std::fs::File;
 use std::path::{Path, PathBuf};
+use tokenizers::Tokenizer;
 
 trait TextGenerator: std::fmt::Debug {
     fn generate(&mut self, prompt: &str, max_tokens: usize) -> Result<String, E>;
