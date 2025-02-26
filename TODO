@@ -2,4 +2,5 @@
 
 1. Create a dynamic model configurator.
 2. Wire up GRPC to inference pipeline.
+3. Figure out if I can keep the model pre-loaded in VRAM outside the generate function.
 

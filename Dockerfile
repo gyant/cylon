@@ -2,7 +2,10 @@ FROM nvidia/cuda:12.6.3-cudnn-devel-ubuntu24.04 AS build
 
 RUN apt update && \
   apt upgrade -y && \
-  apt install -y curl
+  apt install -y \
+  curl \
+  protobuf-compiler \
+  libprotobuf-dev
 
 ENV PATH=$PATH:/root/.cargo/bin
 
