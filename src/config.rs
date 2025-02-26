@@ -57,6 +57,10 @@ struct CliArgs {
     #[arg(long, env = "CYLON_ENABLE_KV_CACHE", default_value_t = true)]
     enable_kv_cache: bool,
 
+    /// The system prompt.
+    #[arg(long, env = "CYLON_SYSTEM_PROMPT", default_value_t = String::from("You are a helpful assistant."))]
+    system_prompt: String,
+
     /// The initial prompt.
     #[arg(long, env = "CYLON_PROMPT")]
     prompt: String,
@@ -89,6 +93,7 @@ pub struct CylonConfig {
     pub sample_len: usize,
     pub enable_kv_cache: bool,
     pub prompt: String,
+    pub system_prompt: String,
     pub dtype: Option<String>,
     pub use_flash_attn: bool,
     pub repeat_penalty: f32,
@@ -117,6 +122,7 @@ impl CylonConfig {
                 sample_len: args.sample_len,
                 enable_kv_cache: args.enable_kv_cache,
                 prompt: args.prompt,
+                system_prompt: args.system_prompt,
                 dtype: args.dtype,
                 use_flash_attn: args.use_flash_attn,
                 repeat_penalty: args.repeat_penalty,

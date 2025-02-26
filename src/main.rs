@@ -10,7 +10,16 @@ fn main() -> Result<()> {
 
     let model = Arc::new(model::Model::new(&config)?);
 
-    let response = model.generate(config.prompt.as_str(), config.sample_len)?;
+    let system_prompt = format!(
+        "{{\"role\":\"system\",\"content\":\"{}\"}}",
+        config.system_prompt
+    );
+
+    let user_prompt = format!("{{\"role\":\"user\",\"content\":\"{}\"}}", config.prompt);
+
+    let prompt = vec![system_prompt.as_str(), user_prompt.as_str()];
+
+    let response = model.generate(prompt, config.sample_len)?;
 
     println!("{response}");
 

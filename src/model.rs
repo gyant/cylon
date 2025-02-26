@@ -6,12 +6,15 @@ use candle_nn::VarBuilder;
 use candle_transformers::generation::{LogitsProcessor, Sampling};
 use candle_transformers::models::llama;
 use llama::{LlamaConfig, LlamaEosToks};
+use minijinja::{context, Environment};
+use serde::Deserialize;
+use serde_json::{from_str, Value};
 use std::fs::File;
 use std::path::{Path, PathBuf};
 use tokenizers::Tokenizer;
 
 trait TextGenerator: std::fmt::Debug {
-    fn generate(&self, prompt: &str, max_tokens: usize) -> Result<String, E>;
+    fn generate(&self, prompt: Vec<&str>, max_tokens: usize) -> Result<String, E>;
     fn tokenize(&self, text: &str) -> Result<Vec<u32>, E>;
     fn decode(&self, tokens: &[u32]) -> Result<String, E>;
 }
@@ -44,11 +47,18 @@ impl EosTokenHandler for NoEosToken {
     }
 }
 
+#[derive(Debug, Deserialize)]
+struct TokenizerConfig {
+    bos_token: String,
+    chat_template: String,
+}
+
 #[derive(Debug)]
 pub struct LlamaModel {
     model: llama::Llama,
     config: llama::Config,
     tokenizer: Tokenizer,
+    tokenizer_config: TokenizerConfig,
     device: Device,
     dtype: DType,
     eos_handler: Box<dyn EosTokenHandler>,
@@ -62,8 +72,25 @@ pub struct LlamaModel {
 }
 
 impl TextGenerator for LlamaModel {
-    fn generate(&self, prompt: &str, max_tokens: usize) -> Result<String, E> {
-        let mut tokens = self.tokenize(prompt)?;
+    fn generate(&self, prompt: Vec<&str>, max_tokens: usize) -> Result<String, E> {
+        let mut template_env = Environment::new();
+        let template_key = "prompt";
+        template_env.add_template(template_key, self.tokenizer_config.chat_template.as_str())?;
+
+        let messages: Vec<Value> = prompt
+            .iter()
+            .map(|s| from_str(s).expect("Failed to parse JSON"))
+            .collect();
+
+        let template = template_env.get_template(template_key)?;
+
+        let rendered = template.render(context! {
+            messages => messages,
+            bos_token => self.tokenizer_config.bos_token.as_str(),
+            add_generation_prompt => false,
+        })?;
+
+        let mut tokens = self.tokenize(rendered.as_str())?;
 
         let mut cache =
             llama::Cache::new(self.enable_kv_cache, self.dtype, &self.config, &self.device)?;
@@ -199,10 +226,14 @@ impl Model {
         let model = llama::Llama::load(vb, &llama_config)?;
         let tokenizer = Tokenizer::from_file(&model_dir.join("tokenizer.json")).map_err(E::msg)?;
 
+        let tokenizer_config_file = File::open(&model_dir.join("tokenizer_config.json"))?;
+        let tokenizer_config: TokenizerConfig = serde_json::from_reader(&tokenizer_config_file)?;
+
         Ok(LlamaModel {
             model,
             config: llama_config,
             tokenizer,
+            tokenizer_config,
             device,
             eos_handler,
             dtype,
@@ -216,7 +247,7 @@ impl Model {
         })
     }
 
-    pub fn generate(&self, prompt: &str, max_tokens: usize) -> Result<String, E> {
+    pub fn generate(&self, prompt: Vec<&str>, max_tokens: usize) -> Result<String, E> {
         self.generator.generate(prompt, max_tokens)
     }
 }
