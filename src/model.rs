@@ -11,7 +11,7 @@ use std::path::{Path, PathBuf};
 use tokenizers::Tokenizer;
 
 trait TextGenerator: std::fmt::Debug {
-    fn generate(&mut self, prompt: &str, max_tokens: usize) -> Result<String, E>;
+    fn generate(&self, prompt: &str, max_tokens: usize) -> Result<String, E>;
     fn tokenize(&self, text: &str) -> Result<Vec<u32>, E>;
     fn decode(&self, tokens: &[u32]) -> Result<String, E>;
 }
@@ -47,9 +47,10 @@ impl EosTokenHandler for NoEosToken {
 #[derive(Debug)]
 pub struct LlamaModel {
     model: llama::Llama,
+    config: llama::Config,
     tokenizer: Tokenizer,
-    cache: llama::Cache,
     device: Device,
+    dtype: DType,
     eos_handler: Box<dyn EosTokenHandler>,
     temperature: f64,
     top_k: Option<usize>,
@@ -57,14 +58,15 @@ pub struct LlamaModel {
     seed: Option<u64>,
     repeat_penalty: f32,
     repeat_last_n: usize,
+    enable_kv_cache: bool,
 }
 
 impl TextGenerator for LlamaModel {
-    fn generate(&mut self, prompt: &str, max_tokens: usize) -> Result<String, E> {
+    fn generate(&self, prompt: &str, max_tokens: usize) -> Result<String, E> {
         let mut tokens = self.tokenize(prompt)?;
 
-        println!("starting the inference loop");
-        println!("{prompt}");
+        let mut cache =
+            llama::Cache::new(self.enable_kv_cache, self.dtype, &self.config, &self.device)?;
 
         let mut logits_processor = {
             let sampling = if self.temperature <= 0. {
@@ -88,7 +90,7 @@ impl TextGenerator for LlamaModel {
         let mut generated_tokens = Vec::new();
 
         for index in 0..max_tokens {
-            let (context_size, context_index) = if self.cache.use_kv_cache && index > 0 {
+            let (context_size, context_index) = if cache.use_kv_cache && index > 0 {
                 (1, index_pos)
             } else {
                 (tokens.len(), 0)
@@ -96,7 +98,7 @@ impl TextGenerator for LlamaModel {
 
             let ctxt = &tokens[tokens.len().saturating_sub(context_size)..];
             let input = Tensor::new(ctxt, &self.device)?.unsqueeze(0)?;
-            let logits = self.model.forward(&input, context_index, &mut self.cache)?;
+            let logits = self.model.forward(&input, context_index, &mut cache)?;
             let logits = logits.squeeze(0)?;
 
             let logits = if self.repeat_penalty == 1. {
@@ -191,8 +193,6 @@ impl Model {
             None => Box::new(NoEosToken),
         };
 
-        let cache = llama::Cache::new(config.enable_kv_cache, dtype, &llama_config, &device)?;
-
         let vb =
             unsafe { VarBuilder::from_mmaped_safetensors(&safetensors_files, dtype, &device)? };
 
@@ -201,20 +201,22 @@ impl Model {
 
         Ok(LlamaModel {
             model,
+            config: llama_config,
             tokenizer,
-            cache,
             device,
             eos_handler,
+            dtype,
             temperature: config.temperature,
             top_k: config.top_k,
             top_p: config.top_p,
             seed: Some(config.seed),
             repeat_penalty: config.repeat_penalty,
             repeat_last_n: config.repeat_last_n,
+            enable_kv_cache: config.enable_kv_cache,
         })
     }
 
-    pub fn generate(&mut self, prompt: &str, max_tokens: usize) -> Result<String, E> {
+    pub fn generate(&self, prompt: &str, max_tokens: usize) -> Result<String, E> {
         self.generator.generate(prompt, max_tokens)
     }
 }
@@ -261,7 +263,6 @@ fn load_safetensor_model_files(model_path: &Path) -> Result<Vec<PathBuf>, E> {
 
     let safetensors_files: Vec<_> = safetensors_files
         .iter()
-        .inspect(|x| println!("{x:?}"))
         .map(|v| model_path.join(v))
         .collect();
 
