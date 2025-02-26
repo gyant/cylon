@@ -17,6 +17,7 @@ trait TextGenerator: std::fmt::Debug {
     fn generate(&self, prompt: Vec<&str>, max_tokens: usize) -> Result<String, E>;
     fn tokenize(&self, text: &str) -> Result<Vec<u32>, E>;
     fn decode(&self, tokens: &[u32]) -> Result<String, E>;
+    fn render(&self, prompt: Vec<&str>) -> Result<String, E>;
 }
 
 trait EosTokenHandler: std::fmt::Debug {
@@ -73,22 +74,7 @@ pub struct LlamaModel {
 
 impl TextGenerator for LlamaModel {
     fn generate(&self, prompt: Vec<&str>, max_tokens: usize) -> Result<String, E> {
-        let mut template_env = Environment::new();
-        let template_key = "prompt";
-        template_env.add_template(template_key, self.tokenizer_config.chat_template.as_str())?;
-
-        let messages: Vec<Value> = prompt
-            .iter()
-            .map(|s| from_str(s).expect("Failed to parse JSON"))
-            .collect();
-
-        let template = template_env.get_template(template_key)?;
-
-        let rendered = template.render(context! {
-            messages => messages,
-            bos_token => self.tokenizer_config.bos_token.as_str(),
-            add_generation_prompt => false,
-        })?;
+        let rendered = self.render(prompt)?;
 
         let mut tokens = self.tokenize(rendered.as_str())?;
 
@@ -177,6 +163,27 @@ impl TextGenerator for LlamaModel {
 
     fn decode(&self, tokens: &[u32]) -> Result<String, E> {
         self.tokenizer.decode(tokens, true).map_err(E::msg)
+    }
+
+    fn render(&self, prompt: Vec<&str>) -> Result<String, E> {
+        let mut template_env = Environment::new();
+        let template_key = "prompt";
+        template_env.add_template(template_key, self.tokenizer_config.chat_template.as_str())?;
+
+        let messages: Vec<Value> = prompt
+            .iter()
+            .map(|s| from_str(s).expect("Failed to parse JSON"))
+            .collect();
+
+        let template = template_env.get_template(template_key)?;
+
+        let rendered = template.render(context! {
+            messages => messages,
+            bos_token => self.tokenizer_config.bos_token.as_str(),
+            add_generation_prompt => false,
+        })?;
+
+        Ok(rendered)
     }
 }
 
