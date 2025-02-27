@@ -13,14 +13,14 @@ use std::fs::File;
 use std::path::{Path, PathBuf};
 use tokenizers::Tokenizer;
 
-trait TextGenerator: std::fmt::Debug {
-    fn generate(&self, prompt: Vec<&str>, max_tokens: usize) -> Result<String, E>;
+trait TextGenerator: std::fmt::Debug + Send + Sync {
+    fn generate(&self, prompt: Vec<String>, max_tokens: usize) -> Result<String, E>;
     fn tokenize(&self, text: &str) -> Result<Vec<u32>, E>;
     fn decode(&self, tokens: &[u32]) -> Result<String, E>;
-    fn render(&self, prompt: Vec<&str>) -> Result<String, E>;
+    fn render(&self, prompt: Vec<String>) -> Result<String, E>;
 }
 
-trait EosTokenHandler: std::fmt::Debug {
+trait EosTokenHandler: std::fmt::Debug + Send + Sync {
     fn is_eos_token(&self, token_id: u32) -> bool;
 }
 
@@ -73,7 +73,7 @@ pub struct LlamaModel {
 }
 
 impl TextGenerator for LlamaModel {
-    fn generate(&self, prompt: Vec<&str>, max_tokens: usize) -> Result<String, E> {
+    fn generate(&self, prompt: Vec<String>, max_tokens: usize) -> Result<String, E> {
         let rendered = self.render(prompt)?;
 
         let mut tokens = self.tokenize(rendered.as_str())?;
@@ -165,7 +165,7 @@ impl TextGenerator for LlamaModel {
         self.tokenizer.decode(tokens, true).map_err(E::msg)
     }
 
-    fn render(&self, prompt: Vec<&str>) -> Result<String, E> {
+    fn render(&self, prompt: Vec<String>) -> Result<String, E> {
         let mut template_env = Environment::new();
         let template_key = "prompt";
         template_env.add_template(template_key, self.tokenizer_config.chat_template.as_str())?;
@@ -254,7 +254,7 @@ impl Model {
         })
     }
 
-    pub fn generate(&self, prompt: Vec<&str>, max_tokens: usize) -> Result<String, E> {
+    pub fn generate(&self, prompt: Vec<String>, max_tokens: usize) -> Result<String, E> {
         self.generator.generate(prompt, max_tokens)
     }
 }
