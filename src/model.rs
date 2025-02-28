@@ -180,7 +180,7 @@ impl TextGenerator for LlamaModel {
         let rendered = template.render(context! {
             messages => messages,
             bos_token => self.tokenizer_config.bos_token.as_str(),
-            add_generation_prompt => false,
+            add_generation_prompt => true,
         })?;
 
         Ok(rendered)
