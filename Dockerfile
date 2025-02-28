@@ -14,6 +14,8 @@ RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --no
 WORKDIR /app
 
 COPY Cargo.toml ./Cargo.toml
+COPY build.rs ./build.rs
+COPY proto ./proto
 COPY src ./src
 
 ARG candle_feature=default

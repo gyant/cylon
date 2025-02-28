@@ -1,13 +1,56 @@
 mod config;
 mod model;
 
-use anyhow::{Error as E, Result};
+use anyhow::Result;
 use config::CylonConfig;
+use cylon::agent_server::{Agent, AgentServer};
+use cylon::{InferenceReply, InferenceRequest};
 use std::sync::Arc;
-use std::thread;
-use std::time::Instant;
+use tonic::{transport::Server, Request, Response, Status};
 
-fn main() -> Result<()> {
+pub mod cylon {
+    tonic::include_proto!("cylon");
+}
+
+#[derive(Debug)]
+pub struct CylonAgent {
+    model: Arc<model::Model>,
+    system_prompt: String,
+    sample_len: usize,
+}
+
+#[tonic::async_trait]
+impl Agent for CylonAgent {
+    async fn run_inference(
+        &self,
+        request: Request<InferenceRequest>,
+    ) -> Result<Response<InferenceReply>, Status> {
+        println!("Got a request: {:?}", request);
+
+        let user_prompt = format!(
+            "{{\"role\":\"user\",\"content\":\"{}\"}}",
+            request.into_inner().prompt
+        );
+
+        let prompt = vec![self.system_prompt.clone(), user_prompt];
+
+        let response = tokio::task::spawn_blocking({
+            let model = Arc::clone(&self.model);
+            let sample_len = self.sample_len;
+            move || model.generate(prompt, sample_len)
+        })
+        .await
+        .map_err(|e| Status::internal(format!("Task failed: {}", e)))?
+        .map_err(|e| Status::internal(format!("Inference failed: {}", e)))?;
+
+        let reply = InferenceReply { response };
+
+        Ok(Response::new(reply))
+    }
+}
+
+#[tokio::main(flavor = "multi_thread")]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let config = CylonConfig::new()?;
 
     let model = Arc::new(model::Model::new(&config)?);
@@ -17,72 +60,19 @@ fn main() -> Result<()> {
         config.system_prompt
     );
 
-    // let user_prompt = format!("{{\"role\":\"user\",\"content\":\"{}\"}}", config.prompt);
+    let addr = format!("{}:{}", config.listen_address, config.listen_port).parse()?;
+    let agent = CylonAgent {
+        model: Arc::clone(&model),
+        system_prompt,
+        sample_len: config.sample_len,
+    };
 
-    // let prompt = vec![system_prompt.as_str(), user_prompt.as_str()];
+    println!("Server listening: {}", addr);
 
-    // let response = model.generate(prompt, config.sample_len)?;
-
-    // println!("{response}");
-
-    let prompt1 = format!("{{\"role\":\"user\",\"content\":\"{}\"}}", "Tell me about cats");
-    let prompt2 = format!("{{\"role\":\"user\",\"content\":\"{}\"}}", "Tell me about dogs");
-    let prompt3 = format!("{{\"role\":\"user\",\"content\":\"{}\"}}", "Tell me about birds");
-    let prompt4 = format!("{{\"role\":\"user\",\"content\":\"{}\"}}", "Tell me about snakes");
-
-    let full_prompt1 = vec![system_prompt.clone(), prompt1];
-    let full_prompt2 = vec![system_prompt.clone(), prompt2];
-    let full_prompt3 = vec![system_prompt.clone(), prompt3];
-    let full_prompt4 = vec![system_prompt.clone(), prompt4];
-
-    println!("Starting concurrent generation...");
-    let start = Instant::now();
-
-    // Clone Arc references for each thread
-    let model1 = model.clone();
-    let model2 = model.clone();
-    let model3 = model.clone();
-    let model4 = model.clone();
-    let sample_len = config.sample_len;
-
-    // Spawn two threads
-    let handle1 = thread::spawn(move || {
-        model1.generate(full_prompt1, sample_len)
-    });
-
-    let handle2 = thread::spawn(move || {
-        model2.generate(full_prompt2, sample_len)
-    });
-
-    let handle3 = thread::spawn(move || {
-        model3.generate(full_prompt3, sample_len)
-    });
-
-    let handle4 = thread::spawn(move || {
-        model4.generate(full_prompt4, sample_len)
-    });
-
-    // Wait for both to complete
-    let result1 = handle1.join().expect("Thread 1 panicked")?;
-    let result2 = handle2.join().expect("Thread 2 panicked")?;
-    let result3 = handle3.join().expect("Thread 3 panicked")?;
-    let result4 = handle4.join().expect("Thread 4 panicked")?;
-
-    let duration = start.elapsed();
-    println!("Both generations completed in {:?}", duration);
-
-    // Print results
-    println!("\n=== RESULT 1 (CATS) ===");
-    println!("{}", result1);
-    
-    println!("\n=== RESULT 2 (DOGS) ===");
-    println!("{}", result2);
-
-    println!("\n=== RESULT 3 (BIRDS) ===");
-    println!("{}", result3);
-
-    println!("\n=== RESULT 4 (SNAKES) ===");
-    println!("{}", result4);
+    Server::builder()
+        .add_service(AgentServer::new(agent))
+        .serve(addr)
+        .await?;
 
     Ok(())
 }

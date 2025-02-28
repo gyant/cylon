@@ -17,8 +17,11 @@ use std::path::Path;
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
 struct CliArgs {
-    #[arg(long, env = "CYLON_MODEL_TYPE", default_value = "safetensors")]
-    model_type: String,
+    #[arg(long, env = "CYLON_LISTEN_ADDRESS", default_value = "127.0.0.1")]
+    listen_address: String,
+
+    #[arg(long, env = "CYLON_LISTEN_PORT", default_value = "8080")]
+    listen_port: String,
 
     #[arg(long, env = "CYLON_MODEL_FAMILY", default_value = "llama")]
     model_family: String,
@@ -61,10 +64,6 @@ struct CliArgs {
     #[arg(long, env = "CYLON_SYSTEM_PROMPT", default_value_t = String::from("You are a helpful assistant."))]
     system_prompt: String,
 
-    /// The initial prompt.
-    #[arg(long, env = "CYLON_PROMPT")]
-    prompt: String,
-
     /// Use different dtype than f16
     #[arg(long, env = "CYLON_DTYPE", default_value = "f16")]
     dtype: Option<String>,
@@ -83,7 +82,8 @@ struct CliArgs {
 
 #[derive(Debug, Deserialize)]
 pub struct CylonConfig {
-    pub model_type: String,
+    pub listen_address: String,
+    pub listen_port: String,
     pub model_family: String,
     pub model_path: String,
     pub temperature: f64,
@@ -92,7 +92,6 @@ pub struct CylonConfig {
     pub seed: u64,
     pub sample_len: usize,
     pub enable_kv_cache: bool,
-    pub prompt: String,
     pub system_prompt: String,
     pub dtype: Option<String>,
     pub use_flash_attn: bool,
@@ -112,7 +111,8 @@ impl CylonConfig {
             serde_yaml::from_str(&content).with_context(|| "Failed to deserialize YAML config")?
         } else {
             CylonConfig {
-                model_type: args.model_type,
+                listen_address: args.listen_address,
+                listen_port: args.listen_port,
                 model_family: args.model_family,
                 model_path: args.model_path,
                 temperature: args.temperature,
@@ -121,7 +121,6 @@ impl CylonConfig {
                 seed: args.seed,
                 sample_len: args.sample_len,
                 enable_kv_cache: args.enable_kv_cache,
-                prompt: args.prompt,
                 system_prompt: args.system_prompt,
                 dtype: args.dtype,
                 use_flash_attn: args.use_flash_attn,
