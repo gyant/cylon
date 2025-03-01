@@ -1,5 +1,7 @@
 mod config;
 mod model;
+mod tools;
+mod utils;
 
 use anyhow::Result;
 use config::CylonConfig;
@@ -28,6 +30,14 @@ struct Prompt {
     content: String,
 }
 
+#[derive(Serialize, Deserialize)]
+struct AgentAction {
+    action: String,
+    //action_input: {
+    //    location: Option<String>,
+    //},
+}
+
 #[tonic::async_trait]
 impl Agent for CylonAgent {
     async fn run_inference(
@@ -44,12 +54,13 @@ impl Agent for CylonAgent {
         let user_prompt = serde_json::to_string(&user_prompt)
             .map_err(|e| Status::internal(format!("Failed to parse prompt: {}", e)))?;
 
-        let prompt = vec![self.system_prompt.clone(), user_prompt];
+        let prompt = Arc::new(vec![self.system_prompt.clone(), user_prompt]);
 
         let response = tokio::task::spawn_blocking({
             let model = Arc::clone(&self.model);
+            let prompt = Arc::clone(&prompt);
             let sample_len = self.sample_len;
-            move || model.generate(prompt, sample_len, None)
+            move || model.standard_inference(&prompt, sample_len, None)
         })
         .await
         .map_err(|e| Status::internal(format!("Task failed: {}", e)))?
@@ -87,10 +98,13 @@ example use :
 ALWAYS use the following format:
 
 Question: the input question you must answer
-Thought: you should always think about one action to take. Only one action at a time in this format:
+Thought: you should always think about one action to take AND INCLUDE THE THOUGHT IN OUTPUT. Only one action at a time in this format:
+
 Action:
 
 $JSON_BLOB (inside markdown cell)
+
+ENSURE ACTION PREFIX IS INCLUDED AND WRAP JSON IN MARKDOWN CELL.
 
 Observation: the result of the action. This Observation is unique, complete, and the source of truth.
 ... (this Thought/Action/Observation can repeat N times, you should take several steps when needed. The $JSON_BLOB must be formatted as markdown and only use a SINGLE action at a time.)
@@ -124,19 +138,90 @@ Now begin! Reminder to ALWAYS use the exact characters `Final Answer:` when you 
         let user_prompt = serde_json::to_string(&user_prompt)
             .map_err(|e| Status::internal(format!("Failed to parse prompt: {}", e)))?;
 
-        let prompt = vec![agent_prompt, user_prompt];
+        let prompt = Arc::new(vec![agent_prompt, user_prompt]);
 
         let observation = tokio::task::spawn_blocking({
             let model = Arc::clone(&self.model);
             let sample_len = self.sample_len;
-            move || model.generate(prompt, sample_len, Some("Observation: "))
+            let prompt = Arc::clone(&prompt);
+            let stop = vec!["Observation:"];
+            move || model.standard_inference(&prompt, sample_len, Some(&stop))
+        })
+        .await
+        .map_err(|e| Status::internal(format!("Task failed: {}", e)))?
+        .map_err(|e| Status::internal(format!("Inference failed: {}", e)))?;
+
+        println!("\n\nOBSERVATION OUTPUT:\n\n{}\n\n", observation);
+
+        let action: AgentAction;
+        match utils::get_last_json(&observation) {
+            Some(json) => {
+                println!("FOUND JSON: {}", json);
+                action = serde_json::from_value(json)
+                    .map_err(|e| Status::internal(format!("Failed to deserialize JSON: {}", e)))?;
+            }
+            None => {
+                println!("NO JSON FOUND");
+                action = AgentAction {
+                    action: String::from("parse_error"),
+                }
+            }
+        };
+
+        let actioned_output: String;
+
+        match action.action.as_str() {
+            "get_weather" => {
+                // TODO: Get output from Agent response
+                actioned_output = tools::get_weather("Casper");
+            }
+            "parse_error" => {
+                actioned_output = String::from("JSON parse error. Please try again and ensure your Action JSON is wrapped in ```");
+            }
+            _ => {
+                let reply = AgentReply {
+                    response: String::from("I'm sorry, this is not an action I currently support."),
+                };
+                return Ok(Response::new(reply));
+            }
+        }
+
+        let observation = Arc::new(String::from(&observation) + " " + &actioned_output);
+
+        println!("\n\nACTION OUTPUT:\n\n{}\n\n", observation);
+
+        let action_output = tokio::task::spawn_blocking({
+            let model = Arc::clone(&self.model);
+            let prompt = Arc::clone(&prompt);
+            let observation = Arc::clone(&observation);
+            let sample_len = self.sample_len;
+            let stop = vec!["Final Answer:", "Observation:"];
+
+            move || model.agent_inference(&prompt, &observation, sample_len, Some(&stop))
+        })
+        .await
+        .map_err(|e| Status::internal(format!("Task failed: {}", e)))?
+        .map_err(|e| Status::internal(format!("Inference failed: {}", e)))?;
+
+        let answer_prompt = Arc::new(observation.to_string() + " " + &action_output);
+
+        println!("\n\nANSWER PROMPT:\n\n{}\n\n", answer_prompt);
+
+        let final_answer = tokio::task::spawn_blocking({
+            let model = Arc::clone(&self.model);
+            let prompt = Arc::clone(&prompt);
+            let answer_prompt = Arc::clone(&answer_prompt);
+            let sample_len = self.sample_len;
+            //let stop = vec!["Final Answer:", "Observation:"];
+
+            move || model.agent_inference(&prompt, &answer_prompt, sample_len, None)
         })
         .await
         .map_err(|e| Status::internal(format!("Task failed: {}", e)))?
         .map_err(|e| Status::internal(format!("Inference failed: {}", e)))?;
 
         let reply = AgentReply {
-            response: observation,
+            response: final_answer,
         };
 
         Ok(Response::new(reply))
