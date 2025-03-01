@@ -3,6 +3,7 @@ package cylon;
 
 service Agent {
   rpc RunInference (InferenceRequest) returns (InferenceReply);
+  rpc RunAgent (AgentRequest) returns (AgentReply);
 }
 
 message InferenceRequest {
@@ -10,5 +11,13 @@ message InferenceRequest {
 }
 
 message InferenceReply {
+    string response = 1;
+}
+
+message AgentRequest {
+   string prompt = 1;
+}
+
+message AgentReply {
     string response = 1;
 }

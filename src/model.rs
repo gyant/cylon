@@ -14,7 +14,12 @@ use std::path::{Path, PathBuf};
 use tokenizers::Tokenizer;
 
 trait TextGenerator: std::fmt::Debug + Send + Sync {
-    fn generate(&self, prompt: Vec<String>, max_tokens: usize) -> Result<String, E>;
+    fn generate(
+        &self,
+        prompt: Vec<String>,
+        max_tokens: usize,
+        stop: Option<&str>,
+    ) -> Result<String, E>;
     fn tokenize(&self, text: &str) -> Result<Vec<u32>, E>;
     fn decode(&self, tokens: &[u32]) -> Result<String, E>;
     fn render(&self, prompt: Vec<String>) -> Result<String, E>;
@@ -73,7 +78,12 @@ pub struct LlamaModel {
 }
 
 impl TextGenerator for LlamaModel {
-    fn generate(&self, prompt: Vec<String>, max_tokens: usize) -> Result<String, E> {
+    fn generate(
+        &self,
+        prompt: Vec<String>,
+        max_tokens: usize,
+        stop: Option<&str>,
+    ) -> Result<String, E> {
         let rendered = self.render(prompt)?;
 
         let mut tokens = self.tokenize(rendered.as_str())?;
@@ -130,6 +140,19 @@ impl TextGenerator for LlamaModel {
             let next_token = logits_processor.sample(&logits)?;
             token_generated += 1;
             tokens.push(next_token);
+
+            // Decode the accumulated tokens into a string
+            // TODO: Use sliding windows to make this more efficient.
+            if let Some(stop) = stop {
+                let generated_text = self
+                    .tokenizer
+                    .decode(&generated_tokens, true)
+                    .map_err(E::msg)?;
+                if generated_text.contains(stop) {
+                    break;
+                }
+            }
+
             generated_tokens.push(next_token);
 
             if self.eos_handler.is_eos_token(next_token) {
@@ -254,8 +277,13 @@ impl Model {
         })
     }
 
-    pub fn generate(&self, prompt: Vec<String>, max_tokens: usize) -> Result<String, E> {
-        self.generator.generate(prompt, max_tokens)
+    pub fn generate(
+        &self,
+        prompt: Vec<String>,
+        max_tokens: usize,
+        stop: Option<&str>,
+    ) -> Result<String, E> {
+        self.generator.generate(prompt, max_tokens, stop)
     }
 }
 
