@@ -16,13 +16,26 @@ use tokenizers::Tokenizer;
 trait TextGenerator: std::fmt::Debug + Send + Sync {
     fn generate(
         &self,
-        prompt: Vec<String>,
+        prompt: String,
         max_tokens: usize,
-        stop: Option<&str>,
+        stop: Option<&Vec<&str>>,
+    ) -> Result<String, E>;
+    fn standard_inference(
+        &self,
+        prompt: &Vec<String>,
+        max_tokens: usize,
+        stop: Option<&Vec<&str>>,
+    ) -> Result<String, E>;
+    fn agent_inference(
+        &self,
+        prompt: &Vec<String>,
+        agent_output: &str,
+        max_tokens: usize,
+        stop: Option<&Vec<&str>>,
     ) -> Result<String, E>;
     fn tokenize(&self, text: &str) -> Result<Vec<u32>, E>;
     fn decode(&self, tokens: &[u32]) -> Result<String, E>;
-    fn render(&self, prompt: Vec<String>) -> Result<String, E>;
+    fn render(&self, prompt: &Vec<String>) -> Result<String, E>;
 }
 
 trait EosTokenHandler: std::fmt::Debug + Send + Sync {
@@ -80,13 +93,11 @@ pub struct LlamaModel {
 impl TextGenerator for LlamaModel {
     fn generate(
         &self,
-        prompt: Vec<String>,
+        prompt: String,
         max_tokens: usize,
-        stop: Option<&str>,
+        stop: Option<&Vec<&str>>,
     ) -> Result<String, E> {
-        let rendered = self.render(prompt)?;
-
-        let mut tokens = self.tokenize(rendered.as_str())?;
+        let mut tokens = self.tokenize(prompt.as_str())?;
 
         let mut cache =
             llama::Cache::new(self.enable_kv_cache, self.dtype, &self.config, &self.device)?;
@@ -140,6 +151,7 @@ impl TextGenerator for LlamaModel {
             let next_token = logits_processor.sample(&logits)?;
             token_generated += 1;
             tokens.push(next_token);
+            generated_tokens.push(next_token);
 
             // Decode the accumulated tokens into a string
             // TODO: Use sliding windows to make this more efficient.
@@ -148,12 +160,18 @@ impl TextGenerator for LlamaModel {
                     .tokenizer
                     .decode(&generated_tokens, true)
                     .map_err(E::msg)?;
-                if generated_text.contains(stop) {
+                let mut stop_found = false;
+                for word in stop {
+                    if generated_text.contains(word) {
+                        stop_found = true;
+                        break;
+                    }
+                }
+
+                if stop_found {
                     break;
                 }
             }
-
-            generated_tokens.push(next_token);
 
             if self.eos_handler.is_eos_token(next_token) {
                 break;
@@ -173,6 +191,31 @@ impl TextGenerator for LlamaModel {
         Ok(generated_text)
     }
 
+    fn standard_inference(
+        &self,
+        prompt: &Vec<String>,
+        max_tokens: usize,
+        stop: Option<&Vec<&str>>,
+    ) -> Result<String, E> {
+        let rendered = self.render(prompt)?;
+
+        self.generate(rendered, max_tokens, stop)
+    }
+
+    fn agent_inference(
+        &self,
+        prompt: &Vec<String>,
+        agent_output: &str,
+        max_tokens: usize,
+        stop: Option<&Vec<&str>>,
+    ) -> Result<String, E> {
+        let rendered = self.render(prompt)?;
+
+        let agent_prompt = rendered + agent_output;
+
+        self.generate(agent_prompt, max_tokens, stop)
+    }
+
     fn tokenize(&self, text: &str) -> Result<Vec<u32>, E> {
         let tokens = self
             .tokenizer
@@ -188,7 +231,7 @@ impl TextGenerator for LlamaModel {
         self.tokenizer.decode(tokens, true).map_err(E::msg)
     }
 
-    fn render(&self, prompt: Vec<String>) -> Result<String, E> {
+    fn render(&self, prompt: &Vec<String>) -> Result<String, E> {
         let mut template_env = Environment::new();
         let template_key = "prompt";
         template_env.add_template(template_key, self.tokenizer_config.chat_template.as_str())?;
@@ -277,13 +320,24 @@ impl Model {
         })
     }
 
-    pub fn generate(
+    pub fn standard_inference(
         &self,
-        prompt: Vec<String>,
+        prompt: &Vec<String>,
         max_tokens: usize,
-        stop: Option<&str>,
+        stop: Option<&Vec<&str>>,
     ) -> Result<String, E> {
-        self.generator.generate(prompt, max_tokens, stop)
+        self.generator.standard_inference(prompt, max_tokens, stop)
+    }
+
+    pub fn agent_inference(
+        &self,
+        prompt: &Vec<String>,
+        agent_output: &str,
+        max_tokens: usize,
+        stop: Option<&Vec<&str>>,
+    ) -> Result<String, E> {
+        self.generator
+            .agent_inference(prompt, agent_output, max_tokens, stop)
     }
 }
 
