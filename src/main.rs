@@ -156,7 +156,6 @@ Now begin! Reminder to ALWAYS use the exact characters `Final Answer:` when you 
             .map_err(|e| Status::internal(format!("Task failed: {}", e)))?
             .map_err(|e| Status::internal(format!("Inference failed: {}", e)))?;
 
-            //agent_prompt = Arc::new(*agent_prompt.clone() + &agent_output);
             agent_prompt = Arc::new((*agent_prompt).clone() + &agent_output);
 
             let action: AgentAction;
