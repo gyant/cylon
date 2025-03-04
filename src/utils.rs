@@ -22,7 +22,20 @@ pub fn get_last_json(input: &str) -> Option<Value> {
         // Look for code block or standalone JSON
         if remaining.starts_with("```") {
             // Handle code block format
-            let code_start = json_start + 3; // Skip ```
+            let mut code_start = json_start + 3; // Skip initial ```
+            let after_ticks = &input[code_start..];
+
+            // Check if it's ```json and skip the "json" if present
+            if after_ticks.to_lowercase().starts_with("json") {
+                code_start += 4; // Skip "json"
+                                 // Skip any whitespace after ```json
+                code_start += input[code_start..]
+                    .chars()
+                    .take_while(|c| c.is_whitespace())
+                    .collect::<String>()
+                    .len();
+            }
+
             if let Some(code_end) = input[code_start..].find("```") {
                 let json_str = &input[code_start..code_start + code_end];
                 if let Ok(value) = from_str::<Value>(json_str.trim()) {
@@ -50,6 +63,15 @@ pub fn get_last_json(input: &str) -> Option<Value> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_valid_json_object_in_agent_prompt_markdown_json_prefix() {
+        let input = "Question: What is the weather in Casper?\n\nThought: I think we need to get the current weather for Casper.\n\nAction:\n\n```json\n{\n  \"action\": \"get_weather\",\n  \"action_input\": {\"location\": \"Casper\"}\n}\n```\n\nObservation: According to the current weather API, the weather in Casper is partly cloudy with a temperature of 22°F (-6°C) and a wind speed of 10 mph (16 km/h).\n\nThought: I now know the final answer\nFinal Answer:";
+        let result = get_last_json(input).unwrap();
+
+        assert_eq!(result["action"], "get_weather");
+        assert_eq!(result["action_input"]["location"], "Casper");
+    }
 
     #[test]
     fn test_valid_json_object_in_agent_prompt() {
