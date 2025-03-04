@@ -90,10 +90,12 @@ The only values that should be in the "action" field are:
 get_weather: Get the current weather in a given location, args: {"location": {"type": "string"}}
 example use : 
 
-{{
+```
+{
   "action": "get_weather",
   "action_input": {"location": "New York"}
-}}
+}
+```
 
 ALWAYS use the following format:
 
@@ -102,7 +104,12 @@ Thought: you should always think about one action to take AND INCLUDE THE THOUGH
 
 Action:
 
-$JSON_BLOB (inside markdown cell)
+```
+{
+  "action": "<ACTION>",
+  "action_input": {...}
+}
+```
 
 ENSURE ACTION PREFIX IS INCLUDED AND WRAP JSON IN MARKDOWN CELL.
 
@@ -155,6 +162,8 @@ Now begin! Reminder to ALWAYS use the exact characters `Final Answer:` when you 
             .await
             .map_err(|e| Status::internal(format!("Task failed: {}", e)))?
             .map_err(|e| Status::internal(format!("Inference failed: {}", e)))?;
+
+            println!("DEBUG OUTPUT:\n\n{}\n\n", agent_output);
 
             agent_prompt = Arc::new((*agent_prompt).clone() + &agent_output);
 
