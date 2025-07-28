@@ -26,13 +26,6 @@ trait TextGenerator: std::fmt::Debug + Send + Sync {
         max_tokens: usize,
         stop: Option<&Vec<&str>>,
     ) -> Result<String, E>;
-    fn agent_inference(
-        &self,
-        prompt: &Vec<String>,
-        agent_output: &str,
-        max_tokens: usize,
-        stop: Option<&Vec<&str>>,
-    ) -> Result<String, E>;
     fn tokenize(&self, text: &str) -> Result<Vec<u32>, E>;
     fn decode(&self, tokens: &[u32]) -> Result<String, E>;
     fn render(&self, prompt: &Vec<String>) -> Result<String, E>;
@@ -202,20 +195,6 @@ impl TextGenerator for LlamaModel {
         self.generate(rendered, max_tokens, stop)
     }
 
-    fn agent_inference(
-        &self,
-        prompt: &Vec<String>,
-        agent_output: &str,
-        max_tokens: usize,
-        stop: Option<&Vec<&str>>,
-    ) -> Result<String, E> {
-        let rendered = self.render(prompt)?;
-
-        let agent_prompt = rendered + agent_output;
-
-        self.generate(agent_prompt, max_tokens, stop)
-    }
-
     fn tokenize(&self, text: &str) -> Result<Vec<u32>, E> {
         let tokens = self
             .tokenizer
@@ -327,17 +306,6 @@ impl Model {
         stop: Option<&Vec<&str>>,
     ) -> Result<String, E> {
         self.generator.standard_inference(prompt, max_tokens, stop)
-    }
-
-    pub fn agent_inference(
-        &self,
-        prompt: &Vec<String>,
-        agent_output: &str,
-        max_tokens: usize,
-        stop: Option<&Vec<&str>>,
-    ) -> Result<String, E> {
-        self.generator
-            .agent_inference(prompt, agent_output, max_tokens, stop)
     }
 }
 

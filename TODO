@@ -5,4 +5,4 @@
 3. Improve system prompt so the model handles tasks it doesn't understand better.
 4. Create a system that grabs tool descriptions and injects them into the system prompt dynamically.
 5. Create a more realistic data-driven tool test against a real API endpoint.
-
+6. Swap Tokio for TARPC

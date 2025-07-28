@@ -1,4 +1,4 @@
-FROM nvidia/cuda:12.6.3-cudnn-devel-ubuntu24.04 AS build
+FROM nvidia/cuda:12.8.1-cudnn-devel-ubuntu24.04 AS build
 
 RUN apt update && \
   apt upgrade -y && \
@@ -20,14 +20,16 @@ COPY src ./src
 
 ARG candle_feature=default
 ARG cuda_compute_cap=89
+ARG cargo_build_jobs=4
 
 RUN if [ "$candle_feature" = "cuda" ] || [ "$candle_feature" = "cudnn" ]; then \
-  CUDA_COMPUTE_CAP=$cuda_compute_cap cargo build --features $candle_feature --release; \
+  CUDA_COMPUTE_CAP=$cuda_compute_cap \
+  cargo build --features $candle_feature -j $cargo_build_jobs --release; \
   else \
-  cargo build --features $candle_feature --release; \
+  cargo build --features $candle_feature -j $cargo_build_jobs --release; \
   fi
 
-FROM nvidia/cuda:12.6.3-cudnn-runtime-ubuntu24.04
+FROM nvidia/cuda:12.8.1-cudnn-runtime-ubuntu24.04
 
 WORKDIR /app
 
