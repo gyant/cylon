@@ -10,11 +10,12 @@ cuda = ["candle-core/cuda", "candle-nn/cuda", "candle-transformers/flash-attn", 
 cudnn = ["candle-core/cudnn", "candle-nn/cuda", "candle-transformers/flash-attn", "candle-flash-attn"]
 
 [dependencies]
-candle-core = "0.8.3"
-candle-transformers = "0.8.3"
-candle-nn = "0.8.3"
+candle-core = "0.9.1"
+candle-transformers = "0.9.1"
+candle-nn = "0.9.1"
 tonic = "0.12.3"
 prost = "0.13"
+tarpc = { version = "0.36", features = ["tokio1"] }
 tokio = { version = "1.0", features = ["macros", "rt-multi-thread"] }
 tokenizers = "0.15"
 anyhow = "1.0"
