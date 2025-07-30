@@ -16,6 +16,9 @@ build-docker-cuda:
 build-docker-cudnn:
 	docker build --tag registry.gyant.internal/cylon:cudnn --build-arg candle_feature=cudnn . 
 
+build-docker-cudnn-blackwell:
+	docker build --tag registry.gyant.internal/cylon:cudnn-blackwell --build-arg candle_feature=cudnn --build-arg cuda_compute_cap=90 . 
+
 run-docker-cuda:
 	docker run --rm --gpus all registry.gyant.internal/cylon:cuda /bin/bash
 
