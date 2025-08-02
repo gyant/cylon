@@ -1,4 +1,4 @@
-use crate::config::CylonConfig;
+use cylon_config::CylonConfig;
 use anyhow::{bail, Error as E, Result};
 use candle_core::utils::{cuda_is_available, metal_is_available};
 use candle_core::{DType, Device, Tensor};

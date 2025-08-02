@@ -1,22 +1,20 @@
-mod config;
-mod model;
-
 use anyhow::Result;
-use config::CylonConfig;
-use cylon::agent_server::{Agent, AgentServer};
-use cylon::{InferenceReply, InferenceRequest};
+use cylon_config::CylonConfig;
+use cylon_proto::agent_server::{Agent, AgentServer};
+use cylon_proto::{InferenceReply, InferenceRequest};
 use serde::{Deserialize, Serialize};
 use serde_json;
 use std::sync::Arc;
 use tonic::{transport::Server, Request, Response, Status};
+use cylon_model::Model;
 
-pub mod cylon {
-    tonic::include_proto!("cylon");
+pub mod cylon_proto {
+    tonic::include_proto!("cylon_proto");
 }
 
 #[derive(Debug)]
 pub struct CylonAgent {
-    model: Arc<model::Model>,
+    model: Arc<Model>,
     system_prompt: String,
     sample_len: usize,
 }
@@ -73,7 +71,7 @@ impl Agent for CylonAgent {
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let config = CylonConfig::new()?;
 
-    let model = Arc::new(model::Model::new(&config)?);
+    let model = Arc::new(Model::new(&config)?);
 
     let system_prompt = Prompt {
         role: String::from("system"),
