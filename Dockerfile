@@ -24,9 +24,9 @@ ARG cargo_build_jobs=4
 
 RUN if [ "$candle_feature" = "cuda" ] || [ "$candle_feature" = "cudnn" ]; then \
   CUDA_COMPUTE_CAP=$cuda_compute_cap \
-  cargo build --features $candle_feature -j $cargo_build_jobs --release; \
+  cargo build --features $candle_feature -j $cargo_build_jobs --workspace --release; \
   else \
-  cargo build --features $candle_feature -j $cargo_build_jobs --release; \
+  cargo build --features $candle_feature -j $cargo_build_jobs --workspace --release; \
   fi
 
 FROM nvidia/cuda:12.8.1-cudnn-runtime-ubuntu24.04

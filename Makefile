@@ -1,8 +1,8 @@
 build:
-	cargo build --features metal
+	cargo build --features metal --workspace
 
 run:
-	cargo run --features metal
+	cargo run --features metal --workspace
 
 build-docker:
 	docker build --tag registry.gyant.internal/cylon:cpu .
