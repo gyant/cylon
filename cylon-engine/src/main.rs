@@ -79,7 +79,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let system_prompt = serde_json::to_string(&system_prompt)?;
 
     let addr = format!("{}:{}", config.listen_address, config.listen_port).parse()?;
-    let agent = CylonEngine {
+    let engine = CylonEngine {
         model: Arc::clone(&model),
         system_prompt,
         sample_len: config.sample_len,
@@ -88,7 +88,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Server listening: {}", addr);
 
     Server::builder()
-        .add_service(EngineServer::new(agent))
+        .add_service(EngineServer::new(engine))
         .serve(addr)
         .await?;
 
