@@ -21,7 +21,6 @@ Cargo.lock
 #.idea/
 
 models/*
-!models/.keep
 
 NOTES
 
