@@ -1,7 +1,7 @@
 syntax = "proto3";
-package cylon_proto;
+package cylon_engine;
 
-service Inference {
+service Engine {
   rpc RunInference (InferenceRequest) returns (InferenceReply);
 }
 
