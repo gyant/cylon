@@ -1,6 +1,6 @@
 use anyhow::Result;
 use cylon_config::CylonConfig;
-use cylon_proto::inference_server::{Inference, InferenceServer};
+use cylon_proto::engine_server::{Engine, EngineServer};
 use cylon_proto::{InferenceReply, InferenceRequest};
 use serde::{Deserialize, Serialize};
 use serde_json;
@@ -9,7 +9,7 @@ use tonic::{transport::Server, Request, Response, Status};
 use cylon_model::Model;
 
 pub mod cylon_proto {
-    tonic::include_proto!("cylon_proto");
+    tonic::include_proto!("cylon_engine");
 }
 
 #[derive(Debug)]
@@ -26,7 +26,7 @@ struct Prompt {
 }
 
 #[tonic::async_trait]
-impl Inference for CylonEngine {
+impl Engine for CylonEngine {
     async fn run_inference(
         &self,
         request: Request<InferenceRequest>,
@@ -88,7 +88,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Server listening: {}", addr);
 
     Server::builder()
-        .add_service(InferenceServer::new(agent))
+        .add_service(EngineServer::new(agent))
         .serve(addr)
         .await?;
 
