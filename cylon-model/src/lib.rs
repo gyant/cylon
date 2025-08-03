@@ -1,5 +1,5 @@
 use cylon_config::CylonConfig;
-use anyhow::{bail, Error as E, Result};
+use anyhow::{bail, Context, Error as E, Result};
 use candle_core::utils::{cuda_is_available, metal_is_available};
 use candle_core::{DType, Device, Tensor};
 use candle_nn::VarBuilder;
@@ -18,13 +18,11 @@ trait TextGenerator: std::fmt::Debug + Send + Sync {
         &self,
         prompt: String,
         max_tokens: usize,
-        stop: Option<&Vec<&str>>,
     ) -> Result<String, E>;
-    fn standard_inference(
+    fn inference(
         &self,
         prompt: &Vec<String>,
         max_tokens: usize,
-        stop: Option<&Vec<&str>>,
     ) -> Result<String, E>;
     fn tokenize(&self, text: &str) -> Result<Vec<u32>, E>;
     fn decode(&self, tokens: &[u32]) -> Result<String, E>;
@@ -88,7 +86,6 @@ impl TextGenerator for LlamaModel {
         &self,
         prompt: String,
         max_tokens: usize,
-        stop: Option<&Vec<&str>>,
     ) -> Result<String, E> {
         let mut tokens = self.tokenize(prompt.as_str())?;
 
@@ -146,26 +143,6 @@ impl TextGenerator for LlamaModel {
             tokens.push(next_token);
             generated_tokens.push(next_token);
 
-            // Decode the accumulated tokens into a string
-            // TODO: Use sliding windows to make this more efficient.
-            if let Some(stop) = stop {
-                let generated_text = self
-                    .tokenizer
-                    .decode(&generated_tokens, true)
-                    .map_err(E::msg)?;
-                let mut stop_found = false;
-                for word in stop {
-                    if generated_text.contains(word) {
-                        stop_found = true;
-                        break;
-                    }
-                }
-
-                if stop_found {
-                    break;
-                }
-            }
-
             if self.eos_handler.is_eos_token(next_token) {
                 break;
             }
@@ -184,15 +161,14 @@ impl TextGenerator for LlamaModel {
         Ok(generated_text)
     }
 
-    fn standard_inference(
+    fn inference(
         &self,
         prompt: &Vec<String>,
         max_tokens: usize,
-        stop: Option<&Vec<&str>>,
     ) -> Result<String, E> {
         let rendered = self.render(prompt)?;
 
-        self.generate(rendered, max_tokens, stop)
+        self.generate(rendered, max_tokens)
     }
 
     fn tokenize(&self, text: &str) -> Result<Vec<u32>, E> {
@@ -258,9 +234,17 @@ impl Model {
 
         let model_dir = Path::new(&config.model_path);
 
-        let safetensors_files = load_safetensor_model_files(&model_dir)?;
+        if !model_dir.exists() {
+            bail!("Model directory does not exist: {}", model_dir.display());
+        } else if !model_dir.is_dir() {
+            bail!("Model path is not a directory: {}", model_dir.display());
+        }
 
-        let model_config_file = File::open(&model_dir.join("config.json"))?;
+        let safetensors_files = load_safetensor_model_files(&model_dir)
+            .with_context(|| format!("Failed to load safetensors files at {}", model_dir.display()))?;
+
+        let model_config_file = File::open(&model_dir.join("config.json"))
+            .with_context(|| format!("Failed to open model config file at {}", model_dir.join("config.json").display()))?;
         let llama_config: LlamaConfig = serde_json::from_reader(&model_config_file)?;
         let llama_config = llama_config.into_config(config.use_flash_attn);
 
@@ -299,13 +283,12 @@ impl Model {
         })
     }
 
-    pub fn standard_inference(
+    pub fn inference(
         &self,
         prompt: &Vec<String>,
         max_tokens: usize,
-        stop: Option<&Vec<&str>>,
     ) -> Result<String, E> {
-        self.generator.standard_inference(prompt, max_tokens, stop)
+        self.generator.inference(prompt, max_tokens)
     }
 }
 

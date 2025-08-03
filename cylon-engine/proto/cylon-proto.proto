@@ -1,14 +1,19 @@
 syntax = "proto3";
 package cylon_proto;
 
-service Agent {
+service Inference {
   rpc RunInference (InferenceRequest) returns (InferenceReply);
 }
 
 message InferenceRequest {
-   string prompt = 1;
+  repeated Message messages = 1;
 }
 
 message InferenceReply {
     string response = 1;
+}
+
+message Message {
+  string role = 1;
+  string content = 2;
 }
