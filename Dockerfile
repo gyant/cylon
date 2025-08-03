@@ -1,11 +1,17 @@
-FROM nvidia/cuda:12.8.1-cudnn-devel-ubuntu24.04 AS build
+ARG build_base_image=nvidia/cuda:12.8.1-cudnn-devel-ubuntu24.04
+ARG runtime_base_image=nvidia/cuda:12.8.1-cudnn-runtime-ubuntu24.04
+
+FROM $build_base_image AS build
 
 RUN apt update && \
   apt upgrade -y && \
   apt install -y \
   curl \
   protobuf-compiler \
-  libprotobuf-dev
+  libprotobuf-dev \
+  build-essential \
+  pkg-config \
+  libssl-dev
 
 ENV PATH=$PATH:/root/.cargo/bin
 
@@ -13,10 +19,7 @@ RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --no
 
 WORKDIR /app
 
-COPY Cargo.toml ./Cargo.toml
-COPY build.rs ./build.rs
-COPY proto ./proto
-COPY src ./src
+COPY . .
 
 ARG candle_feature=default
 ARG cuda_compute_cap=89
@@ -29,10 +32,10 @@ RUN if [ "$candle_feature" = "cuda" ] || [ "$candle_feature" = "cudnn" ]; then \
   cargo build --features $candle_feature -j $cargo_build_jobs --workspace --release; \
   fi
 
-FROM nvidia/cuda:12.8.1-cudnn-runtime-ubuntu24.04
+FROM $runtime_base_image
 
 WORKDIR /app
 
-COPY --from=build /app/target/release/cylon /app/cylon
+COPY --from=build /app/target/release/cylon-engine /app/cylon-engine
 
-CMD ["/app/cylon"]
+CMD ["/app/cylon-engine"]

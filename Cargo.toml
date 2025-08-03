@@ -1,6 +1,8 @@
 [workspace]
 members = [
-    "cylon-bin",
+    "cylon-engine",
     "cylon-config",
     "cylon-model"
 ]
+
+resolver = "3"

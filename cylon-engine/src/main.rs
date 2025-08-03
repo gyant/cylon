@@ -1,6 +1,6 @@
 use anyhow::Result;
 use cylon_config::CylonConfig;
-use cylon_proto::agent_server::{Agent, AgentServer};
+use cylon_proto::inference_server::{Inference, InferenceServer};
 use cylon_proto::{InferenceReply, InferenceRequest};
 use serde::{Deserialize, Serialize};
 use serde_json;
@@ -13,7 +13,7 @@ pub mod cylon_proto {
 }
 
 #[derive(Debug)]
-pub struct CylonAgent {
+pub struct CylonEngine {
     model: Arc<Model>,
     system_prompt: String,
     sample_len: usize,
@@ -25,37 +25,32 @@ struct Prompt {
     content: String,
 }
 
-#[derive(Serialize, Deserialize)]
-struct AgentAction {
-    action: String,
-    //action_input: {
-    //    location: Option<String>,
-    //},
-}
-
 #[tonic::async_trait]
-impl Agent for CylonAgent {
+impl Inference for CylonEngine {
     async fn run_inference(
         &self,
         request: Request<InferenceRequest>,
     ) -> Result<Response<InferenceReply>, Status> {
         println!("Got a request: {:?}", request);
 
-        let user_prompt = Prompt {
-            role: String::from("user"),
-            content: request.into_inner().prompt,
-        };
-
-        let user_prompt = serde_json::to_string(&user_prompt)
-            .map_err(|e| Status::internal(format!("Failed to parse prompt: {}", e)))?;
-
-        let prompt = Arc::new(vec![self.system_prompt.clone(), user_prompt]);
+        let req = request.into_inner();
+        let mut prompt_vec: Vec<String> = vec![self.system_prompt.clone()];
+        for msg in req.messages {
+            let p = Prompt {
+                role: msg.role,
+                content: msg.content,
+            };
+            let json = serde_json::to_string(&p)
+                .map_err(|e| Status::internal(format!("Failed to serialize message: {}", e)))?;
+            prompt_vec.push(json);
+        }
+        let prompt = Arc::new(prompt_vec);
 
         let response = tokio::task::spawn_blocking({
             let model = Arc::clone(&self.model);
             let prompt = Arc::clone(&prompt);
             let sample_len = self.sample_len;
-            move || model.standard_inference(&prompt, sample_len, None)
+            move || model.inference(&prompt, sample_len)
         })
         .await
         .map_err(|e| Status::internal(format!("Task failed: {}", e)))?
@@ -69,10 +64,13 @@ impl Agent for CylonAgent {
 
 #[tokio::main(flavor = "multi_thread")]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    println!("Starting Cylon Engine");
     let config = CylonConfig::new()?;
 
+    println!("Loading model");
     let model = Arc::new(Model::new(&config)?);
 
+    println!("Loading system prompt");
     let system_prompt = Prompt {
         role: String::from("system"),
         content: config.system_prompt.clone(),
@@ -81,7 +79,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let system_prompt = serde_json::to_string(&system_prompt)?;
 
     let addr = format!("{}:{}", config.listen_address, config.listen_port).parse()?;
-    let agent = CylonAgent {
+    let agent = CylonEngine {
         model: Arc::clone(&model),
         system_prompt,
         sample_len: config.sample_len,
@@ -90,7 +88,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Server listening: {}", addr);
 
     Server::builder()
-        .add_service(AgentServer::new(agent))
+        .add_service(InferenceServer::new(agent))
         .serve(addr)
         .await?;
 
