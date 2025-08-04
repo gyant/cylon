@@ -1,0 +1,30 @@
+[package]
+name = "cylon-models"
+version = "0.1.0"
+edition = "2024"
+description = "Model implementations for cylon inference engine"
+
+[dependencies]
+# Workspace dependencies
+anyhow = { workspace = true }
+candle-core = { workspace = true }
+candle-transformers = { workspace = true }
+candle-nn = { workspace = true }
+tokenizers = { workspace = true }
+safetensors = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+minijinja = { workspace = true }
+tracing = { workspace = true }
+
+# Internal dependencies
+cylon-config = { workspace = true }
+cylon-inference-engine = { workspace = true }
+
+[features]
+default = ["llama"]
+llama = []
+# Future features for other models:
+# gpt2 = []
+# mistral = []
+# qwen = []

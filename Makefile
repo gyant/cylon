@@ -2,13 +2,13 @@ build-cpu:
 	cargo build --workspace
 
 run-cpu:
-	cargo run --bin cylon-engine
+	cargo run --bin cylon
 
 build-mac:
 	cargo build --features metal --workspace
 
 run-mac:
-	cargo run --bin cylon-engine --features metal
+	cargo run --bin cylon --features metal
 
 build-docker-cpu:
 	docker build --tag registry.gyant.internal/cylon:cpu \
@@ -30,12 +30,12 @@ build-docker-cuda-blackwell:
 
 build-docker-cudnn:
 	docker build --tag registry.gyant.internal/cylon:cudnn \
-	--build-arg candle_feature=cudnn \
+	--build-arg candle_feature=cudnn,flash-attn \
 	. 
 
 build-docker-cudnn-blackwell:
 	docker build --tag registry.gyant.internal/cylon:cudnn-blackwell \
-	--build-arg candle_feature=cudnn \
+	--build-arg candle_feature=cudnn,flash-attn \
 	--build-arg cuda_compute_cap=90 \
 	. 
 

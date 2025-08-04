@@ -1,8 +1,8 @@
-use super::{TextGenerator, EosTokenHandler, utils::{load_safetensor_model_files, parse_dtype, device}};
+use crate::utils::{load_safetensor_model_files, parse_dtype, device};
+use cylon_inference_engine::{TextGenerator, EosTokenHandler, ModelInference, InferenceEngine, InferenceConfig};
 use anyhow::{bail, Context, Error as E, Result};
 use candle_core::{DType, Device, Tensor};
 use candle_nn::VarBuilder;
-use candle_transformers::generation::{LogitsProcessor, Sampling};
 use candle_transformers::models::llama;
 use llama::{LlamaConfig, LlamaEosToks};
 use minijinja::{context, Environment};
@@ -12,6 +12,9 @@ use std::fs::File;
 use std::path::Path;
 use tokenizers::Tokenizer;
 use cylon_config::CylonConfig;
+
+#[allow(unused_imports)]
+use tracing::{info, debug, error, warn};
 
 #[derive(Debug, Deserialize)]
 struct TokenizerConfig {
@@ -40,7 +43,9 @@ pub struct LlamaModel {
 impl LlamaModel {
     pub fn new(config: &CylonConfig) -> Result<Self> {
         let device = device()?;
+        info!("Using device: {:?}", device);
         let dtype = parse_dtype(&config.dtype)?;
+        info!("Using dtype: {:?}", dtype);
 
         let model_dir = Path::new(&config.model_path);
 
@@ -55,8 +60,22 @@ impl LlamaModel {
 
         let model_config_file = File::open(&model_dir.join("config.json"))
             .with_context(|| format!("Failed to open model config file at {}", model_dir.join("config.json").display()))?;
+
         let llama_config: LlamaConfig = serde_json::from_reader(&model_config_file)?;
-        let llama_config = llama_config.into_config(config.use_flash_attn);
+        
+        // Disable flash attention on Metal since it's CUDA-only
+        let use_flash_attn = match device {
+            Device::Metal(_) => {
+                if config.use_flash_attn {
+                    warn!("Flash attention is not supported on Metal, disabling");
+                }
+                false
+            },
+            Device::Cuda(_) => config.use_flash_attn,
+            _ => false,
+        };
+
+        let llama_config = llama_config.into_config(use_flash_attn);
 
         let eos_handler: EosTokenHandler = match &llama_config.eos_token_id {
             Some(LlamaEosToks::Single(id)) => EosTokenHandler::Single(*id),
@@ -89,6 +108,45 @@ impl LlamaModel {
             enable_kv_cache: config.enable_kv_cache,
         })
     }
+
+    fn inference_config(&self) -> InferenceConfig {
+        InferenceConfig {
+            temperature: self.temperature,
+            top_k: self.top_k,
+            top_p: self.top_p,
+            seed: self.seed,
+            repeat_penalty: self.repeat_penalty,
+            repeat_last_n: self.repeat_last_n,
+        }
+    }
+}
+
+impl ModelInference for LlamaModel {
+    type Cache = llama::Cache;
+
+    fn create_cache(&self, enable_kv_cache: bool, dtype: DType, device: &Device) -> Result<Self::Cache> {
+        llama::Cache::new(enable_kv_cache, dtype, &self.config, device).map_err(E::from)
+    }
+
+    fn forward(&self, input: &Tensor, context_index: usize, cache: &mut Self::Cache) -> Result<Tensor> {
+        self.model.forward(input, context_index, cache).map_err(E::from)
+    }
+
+    fn device(&self) -> &Device {
+        &self.device
+    }
+
+    fn dtype(&self) -> DType {
+        self.dtype
+    }
+
+    fn use_kv_cache(&self) -> bool {
+        self.enable_kv_cache
+    }
+
+    fn eos_handler(&self) -> &EosTokenHandler {
+        &self.eos_handler
+    }
 }
 
 impl TextGenerator for LlamaModel {
@@ -97,75 +155,10 @@ impl TextGenerator for LlamaModel {
         prompt: String,
         max_tokens: usize,
     ) -> Result<String, E> {
-        let mut tokens = self.tokenize(prompt.as_str())?;
-
-        let mut cache =
-            llama::Cache::new(self.enable_kv_cache, self.dtype, &self.config, &self.device)?;
-
-        let mut logits_processor = {
-            let sampling = if self.temperature <= 0. {
-                Sampling::ArgMax
-            } else {
-                let temperature = self.temperature;
-                match (self.top_k, self.top_p) {
-                    (None, None) => Sampling::All { temperature },
-                    (Some(k), None) => Sampling::TopK { k, temperature },
-                    (None, Some(p)) => Sampling::TopP { p, temperature },
-                    (Some(k), Some(p)) => Sampling::TopKThenTopP { k, p, temperature },
-                }
-            };
-            LogitsProcessor::from_sampling(self.seed.unwrap(), sampling)
-        };
-
-        let start_gen = std::time::Instant::now();
-        let mut index_pos = 0;
-        let mut token_generated = 0;
-
-        let mut generated_tokens = Vec::new();
-
-        for index in 0..max_tokens {
-            let (context_size, context_index) = if cache.use_kv_cache && index > 0 {
-                (1, index_pos)
-            } else {
-                (tokens.len(), 0)
-            };
-
-            let ctxt = &tokens[tokens.len().saturating_sub(context_size)..];
-            let input = Tensor::new(ctxt, &self.device)?.unsqueeze(0)?;
-            let logits = self.model.forward(&input, context_index, &mut cache)?;
-            let logits = logits.squeeze(0)?;
-
-            let logits = if self.repeat_penalty == 1. {
-                logits
-            } else {
-                let start_at = tokens.len().saturating_sub(self.repeat_last_n);
-                candle_transformers::utils::apply_repeat_penalty(
-                    &logits,
-                    self.repeat_penalty,
-                    &tokens[start_at..],
-                )?
-            };
-
-            index_pos += ctxt.len();
-
-            let next_token = logits_processor.sample(&logits)?;
-            token_generated += 1;
-            tokens.push(next_token);
-            generated_tokens.push(next_token);
-
-            if self.eos_handler.is_eos_token(next_token) {
-                break;
-            }
-        }
-
-        let generation_time = start_gen.elapsed();
-        let tokens_per_second = token_generated as f64 / generation_time.as_secs_f64();
-
-        println!(
-            "{} tokens generated ({} token/s)",
-            token_generated, tokens_per_second
-        );
-
+        let tokens = self.tokenize(prompt.as_str())?;
+        let config = self.inference_config();
+        
+        let generated_tokens = InferenceEngine::generate(self, tokens, max_tokens, &config)?;
         let generated_text = self.decode(&generated_tokens)?;
 
         Ok(generated_text)

@@ -1,0 +1,40 @@
+syntax = "proto3";
+package cylon;
+
+service CylonApi {
+  rpc InferenceRun (InferenceRunRequest) returns (InferenceRunReply);
+  rpc InferenceStatus (InferenceStatusRequest) returns (InferenceStatusReply);
+  rpc InferenceResult (InferenceResultRequest) returns (InferenceResultResponse);
+}
+
+message InferenceRunRequest {
+  repeated Message messages = 1;
+}
+
+message InferenceRunReply {
+  Message response = 1;
+  string status = 2;
+  string uuid = 3;
+}
+
+message InferenceStatusRequest {
+  string uuid = 1;
+}
+
+message InferenceStatusReply {
+  string status = 1;
+}
+
+message InferenceResultRequest {
+  string uuid = 1;
+}
+
+message InferenceResultResponse {
+  Message response = 1;
+}
+
+message Message {
+  string role = 1;
+  string content = 2;
+  
+}
