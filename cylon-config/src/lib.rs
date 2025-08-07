@@ -1,5 +1,5 @@
 use anyhow::{Context, Error as E, Result};
-use clap::Parser;
+use clap::{Parser, ValueEnum};
 use serde::Deserialize;
 use serde_yaml;
 use std::fs;
@@ -14,14 +14,52 @@ use std::path::Path;
   x: Option<String>,
 */
 
+/// Supported queue types for job processing
+#[derive(ValueEnum, Debug, Clone, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum QueueType {
+    /// Local in-memory queue (default)
+    Local,
+    /// Redis-based distributed queue
+    Redis,
+    /// Kafka-based distributed queue
+    Kafka,
+}
+
+impl std::fmt::Display for QueueType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            QueueType::Local => write!(f, "local"),
+            QueueType::Redis => write!(f, "redis"),
+            QueueType::Kafka => write!(f, "kafka"),
+        }
+    }
+}
+
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
 struct CliArgs {
+    #[arg(long, env = "CYLON_DEBUG", default_value_t = false)]
+    debug: bool,
+
     #[arg(long, env = "CYLON_LISTEN_ADDRESS", default_value = "127.0.0.1")]
     listen_address: String,
 
     #[arg(long, env = "CYLON_LISTEN_PORT", default_value = "8080")]
     listen_port: String,
+
+    #[arg(long, env = "CYLON_QUEUE_DISABLED", default_value_t = false)]
+    queue_disabled: bool,
+
+    // TODO: Add support for different queue types
+    #[arg(long, env = "CYLON_QUEUE_TYPE", default_value_t = QueueType::Local)]
+    queue_type: QueueType,
+
+    #[arg(long, env = "CYLON_QUEUE_BUFFER_SIZE", default_value_t = 100)]
+    queue_buffer_size: usize,
+
+    #[arg(long, env = "CYLON_RESULT_CACHE_TTL", default_value_t = 3600)]
+    result_cache_ttl: i64,
 
     #[arg(long, env = "CYLON_MODEL_FAMILY", default_value = "llama")]
     model_family: String,
@@ -37,15 +75,15 @@ struct CliArgs {
     config_file: Option<String>,
 
     /// The temperature used to generate samples.
-    #[arg(long, env = "CYLON_TEMPERATURE", default_value_t = 0.8)]
+    #[arg(long, env = "CYLON_TEMPERATURE", default_value_t = 0.0)]
     temperature: f64,
 
     /// Nucleus sampling probability cutoff.
-    #[arg(long, env = "CYLON_TOP_P", default_value = "0.95")]
+    #[arg(long, env = "CYLON_TOP_P")]
     top_p: Option<f64>,
 
     /// Only sample among the top K samples.
-    #[arg(long, env = "CYLON_TOP_K", default_value = "40")]
+    #[arg(long, env = "CYLON_TOP_K")]
     top_k: Option<usize>,
 
     /// The seed to use when generating random samples.
@@ -72,7 +110,7 @@ struct CliArgs {
     use_flash_attn: bool,
 
     /// Penalty to be applied for repeating tokens, 1. means no penalty.
-    #[arg(long, env = "CYLON_REPEAT_PENALTY", default_value_t = 1.1)]
+    #[arg(long, env = "CYLON_REPEAT_PENALTY", default_value_t = 1.0)]
     repeat_penalty: f32,
 
     /// The context size to consider for the repeat penalty.
@@ -82,8 +120,13 @@ struct CliArgs {
 
 #[derive(Debug, Deserialize)]
 pub struct CylonConfig {
+    pub debug: bool,
     pub listen_address: String,
     pub listen_port: String,
+    pub queue_disabled: bool,
+    pub queue_type: QueueType,
+    pub queue_buffer_size: usize,
+    pub result_cache_ttl: i64,
     pub model_family: String,
     pub model_path: String,
     pub temperature: f64,
@@ -111,8 +154,13 @@ impl CylonConfig {
             serde_yaml::from_str(&content).with_context(|| "Failed to deserialize YAML config")?
         } else {
             CylonConfig {
+                debug: args.debug,
                 listen_address: args.listen_address,
                 listen_port: args.listen_port,
+                queue_disabled: args.queue_disabled,
+                queue_type: args.queue_type,
+                queue_buffer_size: args.queue_buffer_size,
+                result_cache_ttl: args.result_cache_ttl,
                 model_family: args.model_family,
                 model_path: args.model_path,
                 temperature: args.temperature,

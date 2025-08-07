@@ -6,15 +6,18 @@ use serde_json::Value;
 use std::fs::File;
 use std::path::{Path, PathBuf};
 
+#[allow(unused_imports)]
+use tracing::{info, debug, error, warn};
+
 pub fn device() -> Result<Device> {
     if cuda_is_available() {
-        println!("Running on CUDA device...");
+        info!("Running on CUDA device...");
         Ok(Device::new_cuda(0)?)
     } else if metal_is_available() {
-        println!("Running on Metal device...");
+        info!("Running on Metal device...");
         Ok(Device::new_metal(0)?)
     } else {
-        println!("Running on CPU...");
+        info!("Running on CPU...");
         Ok(Device::Cpu)
     }
 }

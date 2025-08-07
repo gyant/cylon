@@ -1,8 +1,65 @@
 [workspace]
 members = [
-    "cylon-engine",
-    "cylon-config",
-    "cylon-model"
+    "cylon",
+    "cylon-config", 
+    "cylon-inference-engine",
+    "cylon-models"
 ]
 
-resolver = "3"
+resolver = "2"
+
+[workspace.dependencies]
+# Core dependencies
+anyhow = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+serde_yaml = "0.9"
+tracing = "0.1"
+
+# Candle dependencies
+candle-core = "0.9.1"
+candle-transformers = "0.9.1"
+candle-nn = "0.9.1"
+candle-flash-attn = "0.8.3"
+
+# Other ML/AI dependencies
+tokenizers = "0.21"
+safetensors = "0.5.2"
+minijinja = "2.7.0"
+
+# CLI dependencies
+clap = { version = "4.5.30", features = ["derive", "env"] }
+
+# Async/networking dependencies
+tokio = { version = "1.0", features = ["macros", "rt-multi-thread"] }
+tonic = "0.12.3"
+prost = "0.13"
+tarpc = { version = "0.36", features = ["tokio1"] }
+
+# Utility dependencies
+dashmap = "6.1"
+chrono = "0.4"
+uuid = { version = "1.10", features = ["v4"] }
+tracing-subscriber = { version = "0.3", features = ["json", "env-filter"] }
+
+# Build dependencies
+tonic-build = "0.12"
+
+# Internal workspace dependencies
+cylon-config = { path = "cylon-config" }
+cylon-inference-engine = { path = "cylon-inference-engine" }
+cylon-models = { path = "cylon-models" }
+
+# Profiling configuration
+[profile.release-with-debug]
+inherits = "release"
+debug = true        # Include debug symbols for profiling
+lto = false         # Disable LTO for better function visibility
+strip = false       # Keep symbols for profiling
+
+[profile.profiling]
+inherits = "release"
+debug = 2           # Full debug info
+lto = false         # No link-time optimization
+codegen-units = 1   # Single codegen unit for better profiling
+overflow-checks = false  # Keep release performance

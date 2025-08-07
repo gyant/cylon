@@ -1,0 +1,18 @@
+[package]
+name = "cylon-inference-engine"
+version = "0.1.0"
+edition = "2024"
+description = "Generic inference engine for language models"
+
+[dependencies]
+# Workspace dependencies
+anyhow = { workspace = true }
+candle-core = { workspace = true }
+candle-transformers = { workspace = true }
+tracing = { workspace = true }
+
+# Internal dependencies
+cylon-config = { workspace = true }
+
+[features]
+default = []
