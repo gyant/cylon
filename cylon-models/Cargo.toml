@@ -20,11 +20,3 @@ tracing = { workspace = true }
 # Internal dependencies
 cylon-config = { workspace = true }
 cylon-inference-engine = { workspace = true }
-
-[features]
-default = ["llama"]
-llama = []
-# Future features for other models:
-# gpt2 = []
-# mistral = []
-# qwen = []
