@@ -45,7 +45,7 @@ impl Cylon {
         
         let system_prompt = Prompt {
             role: String::from("system"),
-            content: config.system_prompt.clone(),
+            content: config.system_prompt.trim().to_string(),
         };
         let system_prompt = serde_json::to_string(&system_prompt)?;
 
@@ -84,8 +84,8 @@ async fn process_inference_request_shared(
     
     for msg in req.messages {
         let p = Prompt {
-            role: msg.role,
-            content: msg.content,
+            role: msg.role.trim().to_string(),
+            content: msg.content.trim().to_string(),
         };
         let json = serde_json::to_string(&p)
             .map_err(|e| Status::internal(format!("Failed to serialize message: {}", e)))?;

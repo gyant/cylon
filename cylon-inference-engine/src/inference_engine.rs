@@ -56,6 +56,8 @@ pub trait ModelInference: Send + Sync {
     fn dtype(&self) -> DType;
     fn use_kv_cache(&self) -> bool;
     fn eos_handler(&self) -> &EosTokenHandler;
+    fn clear_kv_cache(&self) -> Result<()>;
+    fn supports_persistent_cache(&self) -> bool;
 }
 
 pub struct InferenceEngine;

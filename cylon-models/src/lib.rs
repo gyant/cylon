@@ -1,9 +1,11 @@
 pub mod utils;
 pub mod llama;
 pub mod qwen;
+pub mod model_wrapper;
 
 pub use llama::LlamaModel;
 pub use qwen::QwenModel;
+pub use model_wrapper::ModelWrapper;
 
 use anyhow::{bail, Error as E, Result};
 use cylon_config::CylonConfig;

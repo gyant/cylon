@@ -147,6 +147,16 @@ impl ModelInference for LlamaModel {
     fn eos_handler(&self) -> &EosTokenHandler {
         &self.eos_handler
     }
+
+    fn clear_kv_cache(&self) -> Result<()> {
+        // Llama models use external cache management, so no internal cache to clear
+        Ok(())
+    }
+    
+    fn supports_persistent_cache(&self) -> bool {
+        // Llama uses external cache, so persistence is handled differently
+        false
+    }
 }
 
 impl TextGenerator for LlamaModel {
